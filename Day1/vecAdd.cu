@@ -24,7 +24,7 @@ __global__ void vecAddKernel(int n, float *A, float *B, float *C){
 int main(){
 
     // Variable definitions
-    int n = 10; // Size of vector
+    int n = 1024; // Size of vector
     int size = n * sizeof(float); // Size of the vector in bytes
     float *h_A = new float[n];
     float *h_B = new float[n];
@@ -34,25 +34,34 @@ int main(){
     // Allocation of host memory
     for (int i = 0; i<n; i++){
         h_A[i] = static_cast<float>(1.0);
-        h_B[i] = static_cast<float>(1.0);
+        h_B[i] = static_cast<float>(4.0);
     }
 
-    // Allocation of device memory
+    // Allocation of device memory (args: void type address to a pointer, size)
     cudaCheck(cudaMalloc((void**)&d_A, size));
     cudaCheck(cudaMalloc((void**)&d_B, size));
     cudaCheck(cudaMalloc((void**)&d_C, size));
 
-    // Copy the data to the Device
+    // Copy the data to the Device (Target, Source, Size, Direction)
     cudaCheck(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice));
     cudaCheck(cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice));
 
     // Invoke the Kernel
-
-
-    // Check the Kernel Launch
+    int blockSize = 256; // Number of threads per block
+    int numBlocks = (n + blockSize - 1) / blockSize;
+    printf("Running the kernel with %d threads per block and %d blocks\n", blockSize, numBlocks+1);
+    vecAddKernel<<<numBlocks, blockSize>>>(n, d_A, d_B, d_C);
+    cudaCheck(cudaGetLastError());
     
     // Copy the result back to host
     cudaCheck(cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost));
+
+    // Check the error
+    float error = 0.0;
+    for (int i = 0; i<n; i++){
+        error = error + (h_C[i] - 5.0);
+    }
+    std::cout << "Error in vector addition : " << error << std::endl;
 
     // Free
     cudaFree(d_A);
