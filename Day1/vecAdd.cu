@@ -12,8 +12,13 @@ inline void gpuAssert(cudaError_t err, const char *file, int line){
 }
 
 
-__global__ void vecAdd(int n, float *A, float *B, float *C){
-    // Enter the kernel here
+__global__ void vecAddKernel(int n, float *A, float *B, float *C){
+    // blockDim: Number of threads per block
+    // blockIdx: Block Idx
+    // threadIdx: Thread Idx in the local block
+    int tid = threadIdx.x; // Local id of the thread
+    int gid = blockIdx.x * blockDim.x + tid; // Global id of the thread
+    if (gid < n) C[gid] = A[gid] + B[gid];
 }
 
 int main(){
@@ -42,6 +47,7 @@ int main(){
     cudaCheck(cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice));
 
     // Invoke the Kernel
+
 
     // Check the Kernel Launch
     
