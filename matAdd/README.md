@@ -1,3 +1,3 @@
-## Matrix Addition Kernel
+## RGB to GreyScale Conversion
 
-Add two matrix of size `m \times n`
+Convert an RGB image to grey scale
