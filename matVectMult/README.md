@@ -4,3 +4,4 @@ Summary:
 - Vanilla: Each thread comptues one element of the output vector
 
 Learnings:
+- Mapping matrix to grid
