@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#define cudaCheck(ans) gpuCheck((ans), __FILE__, __LINE__);
+#define cudaCheck(ans) gpuAssert((ans), __FILE__, __LINE__);
 
 inline void gpuAssert(cudaError_t err, const char *file, int line) {
   if (err != cudaSuccess) {
@@ -24,8 +24,14 @@ __global__ void rgbToGreyKernel(const int m, const int n,
   int col = blockIdx.x * blockDim.x + threadIdx.x;
 
   if ((row < m) && (col < n)) {
-    int linear_idx_inp = row * n + col;  // Linear Index of the output image
-        output_image[linear_idx] = input_image[linear_idx
+    int linear_idx_out = row * n + col;  // Linear Index of the output image
+    int linear_idx_in =
+        linear_idx_out *
+        3;  // Linear Index of the input image (start of the index)
+    unsigned char r = input_image[linear_idx_in];
+    unsigned char g = input_image[linear_idx_in + 1];
+    unsigned char b = input_image[linear_idx_in + 2];
+    output_image[linear_idx_out] = 0.21f * r + 0.71f * g + 0.07f * b;
   }
 }
 
@@ -33,8 +39,8 @@ int main() {
   // Initialization
   const int m = 60;  // Number of rows
   const int n = 72;  // Number of cols
-  const int inp_size = 3 * m * n * sizeof(unsigned char);
-  const int out_size = m * n * sizeof(unsigned char);
+  const int input_size = 3 * m * n * sizeof(unsigned char);
+  const int output_size = m * n * sizeof(unsigned char);
   unsigned char *h_input_image =
       new unsigned char[3 * m * n];  // Contains 3 channels (RGB)
   unsigned char *h_output_image =
@@ -53,13 +59,28 @@ int main() {
   cudaCheck(cudaMalloc((void **)&d_output_image, output_size));
 
   // Transfer data to Device
-  cudaMemcpy(d_input_image, h_input_image, inp_size, cudaMemcpyHostToDevice);
+  cudaCheck(cudaMemcpy(d_input_image, h_input_image, input_size,
+                       cudaMemcpyHostToDevice));
 
   // Kernel specification
   dim3 blockDim(16, 16, 1);
   dim3 gridDim(getGridDim(n, blockDim.x), getGridDim(m, blockDim.y), 1);
 
   // Kernel Launch
+  rgbToGreyKernel<<<gridDim, blockDim>>>(m, n, d_input_image, d_output_image);
+  cudaCheck(cudaGetLastError());
+
+  // Transfer the data
+  cudaCheck(cudaMemcpy(h_output_image, d_output_image, output_size,
+                       cudaMemcpyDeviceToHost));
+
+  // Error check
+  float error = 0.0f;
+  unsigned char true_value = 0.21f * 100 + 0.71f * 50 + 0.07f * 220;
+  for (int i = 0; i < m * n; i++) {
+    error += (h_output_image[i] - true_value);
+  }
+  printf("Error: %f\n", error);
 
   // Free
   cudaFree(d_input_image);
