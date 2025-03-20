@@ -28,5 +28,9 @@
 
 # Executables
 *.exe
+exec
 *.out
 *.app
+
+# folders
+undodir/
