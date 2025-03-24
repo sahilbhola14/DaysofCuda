@@ -4,11 +4,11 @@
 #include <cassert>
 #include <iostream>
 
-const int M = 16;  // Number of rows of A
-const int N = 16;  // Number of cols of A
-const int T = 16;  // Number of cols of B
+const int M = 1024;  // Number of rows of A
+const int N = 1024;  // Number of cols of A
+const int T = 1024;  // Number of cols of B
 
-#define TILE_SIZE 16  // Tile size for tiledMatMult
+#define TILE_SIZE 32  // Tile size for tiledMatMult
 #define cudaCheck(ans) gpuAssert((ans), __FILE__, __LINE__);
 
 inline void gpuAssert(cudaError_t err, const char *file, int line) {
@@ -52,7 +52,8 @@ __global__ void tiledMatMultKernel(const int m, const int n, const int t,
   int col = bx * TILE_SIZE + tx;  // Col of C that is evaluated the thread
 
   float dot_product = 0.0f;
-  // Loop over the blocks
+
+  // Loop over the blocks for the inner dimension
   for (int bid = 0; bid < (n / TILE_SIZE); bid++) {
     // Load the data from A and B to __shared __
     // Each thread EXACTLY maps one value from A and B. A tile of the size
@@ -77,7 +78,7 @@ __global__ void tiledMatMultKernel(const int m, const int n, const int t,
     __syncthreads();  // All threads in block must have copied their data
 
     for (int k = 0; k < TILE_SIZE; k++) {
-      dot_product += tile_A[ty * TILE_SIZE + tx] * tile_B[k * TILE_SIZE + col];
+      dot_product += tile_A[ty * TILE_SIZE + k] * tile_B[k * TILE_SIZE + tx];
     }
 
     __syncthreads();  // All threads must be done using __shared__ data
@@ -120,8 +121,18 @@ void vanillaMatMult() {
   dim3 gridDim(getGridDim(T, blockDim.x), getGridDim(M, blockDim.y), 1);
 
   // Launch the kernel
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start);  // Start recording
+
   vanillaMatMultKernel<<<gridDim, blockDim>>>(M, N, T, d_A, d_B, d_C);
   cudaCheck(cudaGetLastError());
+
+  cudaEventRecord(stop);       // Stop recording
+  cudaEventSynchronize(stop);  // Sync
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
 
   // Transfer data to host
   cudaCheck(cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost));
@@ -131,7 +142,7 @@ void vanillaMatMult() {
   for (int i = 0; i < M * T; i++) {
     error += (h_C[i] - N * 2.0);
   }
-  printf("Error: %f\n", error);
+  printf("(Vanilla) Error: %f with Elapsed time: %f\n", error, milliseconds);
 
   // Free
   cudaFree(d_A);
@@ -171,9 +182,20 @@ void tiledMatMult() {
   // Kernel paramters (BlockDim dosent necessarily have to be tile_size.)
   dim3 blockDim(TILE_SIZE, TILE_SIZE, 1);
   dim3 gridDim(getGridDim(T, blockDim.x), getGridDim(M, blockDim.y), 1);
-  // Kernel Launch
+
+  // Launch the kernel
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start);  // Start recording
+
   tiledMatMultKernel<<<gridDim, blockDim>>>(M, N, T, d_A, d_B, d_C);
   cudaCheck(cudaGetLastError());
+
+  cudaEventRecord(stop);       // Stop recording
+  cudaEventSynchronize(stop);  // Sync
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
 
   // Transfer Data
   cudaCheck(cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost));
@@ -181,10 +203,9 @@ void tiledMatMult() {
   // Error check
   float error = 0.0f;
   for (int i = 0; i < M * T; i++) {
-    std::cout << h_C[i] << std::endl;
     error += (h_C[i] - N * 2.0);
   }
-  printf("Error: %f\n", error);
+  printf("(Tiled) Error: %f with Elapsed time: %f\n", error, milliseconds);
 
   // Free
   cudaFree(d_A);
@@ -194,7 +215,7 @@ void tiledMatMult() {
 
 int main() {
   // Vanilla Kernel
-  /* vanillaMatMult(); */
+  vanillaMatMult();
   // Tiled Kernel
   tiledMatMult();
 
