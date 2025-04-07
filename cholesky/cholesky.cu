@@ -4,7 +4,7 @@
 #include <cassert>
 #include <iostream>
 
-const int N = 10;
+const int N = 1000;
 #define cudaCheck(ans) gpuAssert((ans), __FILE__, __LINE__);
 
 inline void gpuAssert(cudaError_t err, const char *file, int line) {
@@ -137,23 +137,26 @@ void computeRightLookingCholesky(float *h_a, float *h_l) {
 
 int main() {
   float *h_a = new float[N * N];
-  float *h_l = new float[N * N];
+  float *h_l_v = new float[N * N];
+  float *h_l_rl = new float[N * N];
   // Initialize the matrix on the host memory
   create_matrix(h_a);
+
   // Serial Vanilla Cholesky (Host)
-  /* computeVanillaCholesky(h_a, h_l); */
+  computeVanillaCholesky(h_a, h_l_v);
 
   // Right Looking Cholesky (Device)
-  computeRightLookingCholesky(h_a, h_l);
+  computeRightLookingCholesky(h_a, h_l_rl);
 
-  for (int k = 0; k < N; k++) {
-    for (int j = 0; j < N; j++) {
-      printf("%.4f ,", h_l[k * N + j]);
-    }
-    printf("\n");
+  // Error
+  double error = 0.0;
+  for (int i = 0; i < N * N; i++) {
+    error += pow(h_l_v[i] - h_l_rl[i], 2);
   }
+  printf("Error: %f\n", error);
 
   // Free Host
   delete[] h_a;
-  delete[] h_l;
+  delete[] h_l_v;
+  delete[] h_l_rl;
 }
