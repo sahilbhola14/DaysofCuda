@@ -3,6 +3,8 @@
 
 #include <iostream>
 
+__global__ void kernel() { int x = threadIdx.x; }
+
 int main() {
   // Get Device count
   int dev_count;
@@ -25,6 +27,12 @@ int main() {
            dev_prop.maxGridSize[0], dev_prop.maxGridSize[1],
            dev_prop.maxGridSize[2]);
     printf("Warp size: %d\n", dev_prop.warpSize);
+    printf("Registers per block: %d\n", dev_prop.regsPerBlock);
   }
+
+  cudaFuncAttributes attr;
+  cudaFuncGetAttributes(&attr, kernel);
+  printf("Registers per thread: %d\n", attr.numRegs);
+
   return 0;
 }
