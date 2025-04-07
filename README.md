@@ -13,3 +13,4 @@ This repository condtains implementations for CUDA kernels.
 | Day 7 | Started Sec 4.4 of PMPP, finished tiled matrix-matrix kernel|
 | Day 8 | Finshed chapter 4 of PMPP, wrote parallel reduction with shared memeory|
 | Day 9 | Wrote vanilla Jacobi solver for laplace equation|
+| Day 10 | Wrote right looking Cholesky Decomposition|
