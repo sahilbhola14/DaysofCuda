@@ -1,73 +1,90 @@
-// Add two vector of size n
-#include <cuda.h>
-
+// description: add two vector of size n
+// blockDim: number of threads per block
+// gridDim: number of grids
+#include <cassert>
 #include <iostream>
+#include <vector>
 
-#define cudaCheck(ans) gpuAssert((ans), __FILE__, __LINE__);
+#define cuda_check(ans) gpu_assert((ans), __FILE__, __LINE__)
 
-inline void gpuAssert(cudaError_t err, const char *file, int line) {
+inline void gpu_assert(cudaError_t err, const char *file, const int line) {
   if (err != cudaSuccess) {
-    printf("<Error>: %s in %s at line %d\n", cudaGetErrorString(err), file,
+    printf("<CUDA Error>: %s in %s at line %d\n", cudaGetErrorString(err), file,
            line);
     exit(EXIT_FAILURE);
   }
 }
 
-__global__ void vecAddKernel(int n, float *A, float *B, float *C) {
-  // blockDim: Number of threads per block
-  // blockIdx: Block Idx
-  // threadIdx: Thread Idx in the local block
-  int tid = threadIdx.x;                    // Local id of the thread
-  int gid = blockIdx.x * blockDim.x + tid;  // Global id of the thread
-  if (gid < n) C[gid] = A[gid] + B[gid];
+// kernel for adding
+__global__ void vec_add_kernel(const int n, const float *a, const float *b,
+                               float *res) {
+  // params
+  const int tid = threadIdx.x;
+  const int gid = blockIdx.x * blockDim.x + tid;
+  // kernel launch
+  if (gid < n) {
+    res[gid] = a[gid] + b[gid];
+  }
+}
+
+// vector initialization
+void initialize_vector(std::vector<float> &a) {
+  const int n = a.size();
+  for (int i = 0; i < n; ++i) {
+    a[i] = 1.0f;
+  }
+}
+
+// vector printing
+void print_vector(std::vector<float> &a) {
+  const int n = a.size();
+  for (auto &v : a) {
+    printf("%f\n", v);
+  }
+}
+
+// grid dim
+int get_grid_dim(const int n, const int dim) { return (n + dim - 1) / dim; }
+
+// check result
+void check_result(const float *a, const int n, const float target) {
+  for (int i = 0; i < n; ++i) {
+    assert(a[i] == target);
+  }
 }
 
 int main() {
-  // Variable definitions
-  int n = 1024;                  // Size of vector
-  int size = n * sizeof(float);  // Size of the vector in bytes
-  float *h_A = new float[n];
-  float *h_B = new float[n];
-  float *h_C = new float[n];
-  float *d_A, *d_B, *d_C;
-
-  // Allocation of host memory
-  for (int i = 0; i < n; i++) {
-    h_A[i] = static_cast<float>(1.0);
-    h_B[i] = static_cast<float>(4.0);
-  }
-
-  // Allocation of device memory (args: void type address to a pointer, size)
-  cudaCheck(cudaMalloc((void **)&d_A, size));
-  cudaCheck(cudaMalloc((void **)&d_B, size));
-  cudaCheck(cudaMalloc((void **)&d_C, size));
-
-  // Copy the data to the Device (Target, Source, Size, Direction)
-  cudaCheck(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice));
-  cudaCheck(cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice));
-
-  // Invoke the Kernel
-  int blockSize = 256;  // Number of threads per block
-  int numBlocks = (n + blockSize - 1) / blockSize;
-  printf("Running the kernel with %d threads per block and %d blocks\n",
-         blockSize, numBlocks + 1);
-  vecAddKernel<<<numBlocks, blockSize>>>(n, d_A, d_B, d_C);
-  cudaCheck(cudaGetLastError());
-
-  // Copy the result back to host
-  cudaCheck(cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost));
-
-  // Check the error
-  float error = 0.0;
-  for (int i = 0; i < n; i++) {
-    error = error + (h_C[i] - 5.0);
-  }
-  std::cout << "Error in vector addition : " << error << std::endl;
-
-  // Free
-  cudaFree(d_A);
-  cudaFree(d_B);
-  cudaFree(d_C);
-
+  // parameters
+  const int n = 100000;
+  const int size = n * sizeof(float);
+  // initialize the vector
+  std::vector<float> h_a(n), h_b(n), h_res(n);
+  initialize_vector(h_a);
+  initialize_vector(h_b);
+  // device pointer
+  float *d_a, *d_b, *d_res;
+  cuda_check(cudaMalloc((void **)&d_a, size));
+  cuda_check(cudaMalloc((void **)&d_b, size));
+  cuda_check(cudaMalloc((void **)&d_res, size));
+  // copy the data
+  cuda_check(cudaMemcpy(d_a, h_a.data(), size, cudaMemcpyHostToDevice));
+  cuda_check(cudaMemcpy(d_b, h_b.data(), size, cudaMemcpyHostToDevice));
+  // kernel launch
+  dim3 blockDim(32 * 4);
+  dim3 gridDim(get_grid_dim(n, blockDim.x));
+  printf("Number of threads per block: %d\n", blockDim.x);
+  printf("Number of grids: %d\n", gridDim.x);
+  vec_add_kernel<<<gridDim, blockDim>>>(n, d_a, d_b, d_res);
+  cuda_check(cudaGetLastError());
+  // transfer
+  cuda_check(cudaMemcpy(h_res.data(), d_res, size, cudaMemcpyDeviceToHost));
+  // check
+  check_result(h_res.data(), n, 2.0f);
+  // print
+  // print_vector(h_res);
+  // free
+  cudaFree(d_a);
+  cudaFree(d_b);
+  cudaFree(d_res);
   return 0;
 }
