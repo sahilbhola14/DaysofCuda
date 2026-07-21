@@ -2,6 +2,9 @@
 // blockDim: number of threads per block
 // gridDim: number of grids
 // Using pinned memory to improve the Memcpy overhead.
+// just using pinned memory does not result in Asyn transfer, but enalbes it
+// cudaEvent is just a flag, it frees up the CPU to do other tasks. However,
+// using streamSynchronize would have resulted in the CPU to wait.
 #include <cassert>
 #include <iostream>
 #include <vector>
