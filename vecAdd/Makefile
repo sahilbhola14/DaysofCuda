@@ -8,7 +8,8 @@ NVCC 	:= nvcc
 # architecture
 ARCH 	:= sm_80
 # files
-SRC 	:= vecAdd.cu
+# SRC 	:= vecAdd.cu
+SRC 	:= vecAdd_pinned.cu
 OUT 	:= run
 # build
 DEBUG_FLAGS    := -O0 -g -G -lineinfo

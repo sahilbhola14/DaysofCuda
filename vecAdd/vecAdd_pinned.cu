@@ -54,7 +54,7 @@ void check_result(const float *a, const int n, const float target) {
 
 int main() {
   // parameters
-  const int n = 100000;
+  const int n = 100000000;
   const int size = n * sizeof(float);
   // initialize
   float *h_a, *h_b, *h_res;
@@ -70,23 +70,37 @@ int main() {
   cuda_check(cudaMalloc((void **)&d_a, size));
   cuda_check(cudaMalloc((void **)&d_b, size));
   cuda_check(cudaMalloc((void **)&d_res, size));
-  // copy the data
-  cuda_check(cudaMemcpy(d_a, h_a, size, cudaMemcpyHostToDevice));
-  cuda_check(cudaMemcpy(d_b, h_b, size, cudaMemcpyHostToDevice));
+  // streams so the two H2D copies can run concurrently on separate copy engines
+  cudaStream_t stream_a, stream_b;
+  cuda_check(cudaStreamCreate(&stream_a));
+  cuda_check(cudaStreamCreate(&stream_b));
+  cudaEvent_t b_ready;
+  cuda_check(cudaEventCreate(&b_ready));
+  // copy the data (async, pinned host memory required for true async behavior)
+  cuda_check(cudaMemcpyAsync(d_a, h_a, size, cudaMemcpyHostToDevice, stream_a));
+  cuda_check(cudaMemcpyAsync(d_b, h_b, size, cudaMemcpyHostToDevice, stream_b));
+  // let stream_a's kernel wait on stream_b's copy instead of blocking the host
+  cuda_check(cudaEventRecord(b_ready, stream_b));
+  cuda_check(cudaStreamWaitEvent(stream_a, b_ready, 0));
   // kernel launch
   dim3 blockDim(32 * 4);
   dim3 gridDim(get_grid_dim(n, blockDim.x));
   printf("Number of threads per block: %d\n", blockDim.x);
   printf("Number of grids: %d\n", gridDim.x);
-  vec_add_kernel<<<gridDim, blockDim>>>(n, d_a, d_b, d_res);
+  vec_add_kernel<<<gridDim, blockDim, 0, stream_a>>>(n, d_a, d_b, d_res);
   cuda_check(cudaGetLastError());
-  // transfer
-  cuda_check(cudaMemcpy(h_res, d_res, size, cudaMemcpyDeviceToHost));
+  // transfer back asynchronously on the same stream (ordered after the kernel)
+  cuda_check(
+      cudaMemcpyAsync(h_res, d_res, size, cudaMemcpyDeviceToHost, stream_a));
+  cuda_check(cudaStreamSynchronize(stream_a));
   // check
   check_result(h_res, n, 2.0f);
   // print
   // print_vector(n, h_res);
   // free
+  cudaEventDestroy(b_ready);
+  cudaStreamDestroy(stream_a);
+  cudaStreamDestroy(stream_b);
   cudaFreeHost(h_a);
   cudaFreeHost(h_b);
   cudaFreeHost(h_res);
